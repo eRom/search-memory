@@ -40,3 +40,17 @@ search-memories "OAuth" | jq -r '"\(.date)  \(.fragment)"'
 ## Performance
 
 ~191 fichiers markdown scannes en <20ms (cold ~340ms premiere exec).
+
+## CLAUDE.md
+
+```markdown
+## Mémoire cross-sessions
+
+Avant de répondre à une question susceptible d'avoir déjà été abordée (autre projet, autre session), lance :
+
+  `search-memories "<terms>"`
+
+Sortie JSONL `{date, project, file, topic, fragment}`. AND case-insensitive. Scope : `~/.claude/projects/*/memory/*.md`. Coût ~17ms.
+
+Utilise systématiquement avant : re-explorer une archi, redécouvrir une stack déjà cadrée, redémarrer un debug. Si match pertinent, lis le `file` complet via `~/.claude/projects/{project}/memory/{file}`.
+```
