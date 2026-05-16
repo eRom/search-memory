@@ -44,6 +44,9 @@ fn main() -> ExitCode {
 
     let mut hits: Vec<Hit> = Vec::new();
     for entry in glob(&pattern.to_string_lossy()).expect("bad glob").flatten() {
+        if entry.file_name().map(|n| n == "MEMORY.md").unwrap_or(false) {
+            continue;
+        }
         if let Some(hit) = scan_file(&entry, &terms) {
             hits.push(hit);
         }
