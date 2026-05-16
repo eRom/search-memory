@@ -41,13 +41,17 @@ fn main() -> ExitCode {
         }
     };
     let pattern = home.join(".claude/projects/*/memory/*.md");
+    let home_enc = home.to_string_lossy().replace('/', "-");
 
     let mut hits: Vec<Hit> = Vec::new();
-    for entry in glob(&pattern.to_string_lossy()).expect("bad glob").flatten() {
+    for entry in glob(&pattern.to_string_lossy())
+        .expect("bad glob")
+        .flatten()
+    {
         if entry.file_name().map(|n| n == "MEMORY.md").unwrap_or(false) {
             continue;
         }
-        if let Some(hit) = scan_file(&entry, &terms) {
+        if let Some(hit) = scan_file(&entry, &terms, &home_enc) {
             hits.push(hit);
         }
     }
@@ -73,7 +77,7 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn scan_file(path: &Path, terms: &[String]) -> Option<Hit> {
+fn scan_file(path: &Path, terms: &[String], home_enc: &str) -> Option<Hit> {
     let content = fs::read_to_string(path).ok()?;
     let lower = content.to_lowercase();
 
@@ -86,13 +90,16 @@ fn scan_file(path: &Path, terms: &[String]) -> Option<Hit> {
         term_positions.push(positions);
     }
 
-    let (win_start, win_end) = min_window(&term_positions, &terms.iter().map(|t| t.len()).collect::<Vec<_>>());
+    let (win_start, win_end) = min_window(
+        &term_positions,
+        &terms.iter().map(|t| t.len()).collect::<Vec<_>>(),
+    );
     let anchor = (win_start + win_end) / 2;
     let fragment = extract_fragment(&content, anchor);
 
     let mtime = fs::metadata(path).and_then(|m| m.modified()).ok()?;
     let date: DateTime<Local> = mtime.into();
-    let project = extract_project(path);
+    let project = extract_project(path, home_enc);
     let file = path.file_name()?.to_string_lossy().into_owned();
     let topic = extract_topic(&content);
 
@@ -176,27 +183,24 @@ fn extract_fragment(content: &str, anchor: usize) -> String {
 }
 
 /// Derive a short project tag from the Claude folder name encoding.
-/// `-Users-recarnot-dev-agent-brain` -> `agent-brain`
-/// `-Users-recarnot--claude` -> `claude`
-/// `-Users-recarnot-.config-cc-interim-...` -> the tail
-fn extract_project(path: &Path) -> String {
+/// Claude encodes cwd by replacing `/` with `-`, so `$HOME` encoded is the
+/// universal prefix. Strip it, then trim residual `-`/`.` separators, then
+/// strip a leading `dev-` (where 90% of repos live) for a cleaner tag.
+///
+/// `$HOME=/Users/foo` -> home_enc = `-Users-foo`
+/// `-Users-foo-dev-agent-brain` -> `agent-brain`
+/// `-Users-foo--claude` -> `claude`
+/// `-Users-foo-.config-cc-interim-X` -> `config-cc-interim-X`
+fn extract_project(path: &Path, home_enc: &str) -> String {
     let folder = path
         .parent()
         .and_then(|p| p.parent())
         .and_then(|p| p.file_name())
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    for prefix in [
-        "-Users-recarnot-dev-",
-        "-Users-recarnot--",
-        "-Users-recarnot-.",
-        "-Users-recarnot-",
-    ] {
-        if let Some(rest) = folder.strip_prefix(prefix) {
-            return rest.trim_matches('-').to_string();
-        }
-    }
-    folder
+    let stripped = folder.strip_prefix(home_enc).unwrap_or(&folder);
+    let trimmed = stripped.trim_start_matches(|c: char| c == '-' || c == '.');
+    trimmed.strip_prefix("dev-").unwrap_or(trimmed).to_string()
 }
 
 /// Topic = frontmatter `description:` (preferred) or `name:`, else first H1, else "".
@@ -239,10 +243,7 @@ fn extract_topic(content: &str) -> String {
 }
 
 fn clean_yaml(v: &str) -> String {
-    v.trim()
-        .trim_matches('"')
-        .trim_matches('\'')
-        .to_string()
+    v.trim().trim_matches('"').trim_matches('\'').to_string()
 }
 
 fn floor_char_boundary(s: &str, mut i: usize) -> usize {
