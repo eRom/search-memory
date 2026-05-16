@@ -69,19 +69,21 @@ fn scan_file(path: &PathBuf, terms: &[String]) -> Option<Hit> {
     let content = fs::read_to_string(path).ok()?;
     let lower = content.to_lowercase();
 
-    let mut first_pos = usize::MAX;
+    let mut anchor_pos = 0usize;
+    let mut anchor_len = 0usize;
     for t in terms {
         match lower.find(t) {
             Some(p) => {
-                if p < first_pos {
-                    first_pos = p;
+                if t.len() > anchor_len {
+                    anchor_len = t.len();
+                    anchor_pos = p;
                 }
             }
             None => return None,
         }
     }
 
-    let fragment = extract_fragment(&content, first_pos, terms);
+    let fragment = extract_fragment(&content, anchor_pos, terms);
     let mtime = fs::metadata(path).and_then(|m| m.modified()).ok()?;
     let date: DateTime<Local> = mtime.into();
     Some(Hit {
