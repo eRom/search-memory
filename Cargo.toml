@@ -1,0 +1,20 @@
+[package]
+name = "search-memories"
+version = "0.1.0"
+edition = "2021"
+description = "Fast cross-session search across Claude Code memory files"
+license = "MIT"
+
+[[bin]]
+name = "search-memories"
+path = "src/main.rs"
+
+[dependencies]
+glob = "0.3"
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
